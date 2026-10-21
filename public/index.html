@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crate Fishing</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#0b0b2b;--panel:#1a1a4a;--ink:#fff;--acc:#ffcc00;--hot:#ff3366;--cy:#33ddff;--ok:#66ff66}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Press Start 2P","Courier New",monospace;font-size:10px;line-height:1.7;display:flex;justify-content:center;padding-bottom:150px}
+.w{width:100%;max-width:680px;padding:12px}
+h1{font-size:16px;color:var(--acc);text-shadow:3px 3px 0 var(--hot);margin:6px 0;text-align:center}
+.sub{text-align:center;color:var(--cy);margin-bottom:10px}
+.spots{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+button,.btn{font:inherit;font-size:10px;color:var(--ink);background:var(--panel);border:3px solid var(--cy);padding:8px 10px;cursor:pointer;text-decoration:none;display:inline-block;box-shadow:3px 3px 0 #000}
+button.on{background:var(--hot);border-color:var(--acc)}
+button:active,.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #000}
+canvas#sc{width:100%;image-rendering:pixelated;border:4px solid var(--acc);display:block;background:#000;touch-action:manipulation}
+.shake{animation:sh .35s}
+@keyframes sh{0%,100%{transform:translate(0)}20%{transform:translate(-5px,2px)}40%{transform:translate(5px,-2px)}60%{transform:translate(-4px,-2px)}80%{transform:translate(4px,2px)}}
+.bar{display:flex;justify-content:space-between;margin:8px 0;color:var(--acc)}
+.pop{animation:pop .5s}
+@keyframes pop{0%{transform:scale(1)}35%{transform:scale(1.18);border-color:var(--ok)}100%{transform:scale(1)}}
+#msg{min-height:34px;color:var(--ok)}
+.mini{font-size:8px;padding:5px 8px;margin:0 0 8px;border-color:var(--acc);color:var(--acc)}
+.card{position:relative;background:var(--panel);border:4px solid var(--ok);padding:12px;margin:10px 0;display:flex;gap:12px;flex-wrap:wrap;transition:opacity .4s,transform .4s}
+.card.out{opacity:0;transform:translateY(24px)}
+.card canvas,.g canvas{width:96px;height:96px;image-rendering:pixelated;border:3px solid var(--acc);flex:none}
+.tag{display:inline-block;padding:2px 6px;background:var(--acc);color:#000;margin-bottom:6px}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.stamp{position:absolute;right:14px;top:50%;margin-top:-26px;font-size:22px;color:var(--ok);border:4px solid var(--ok);padding:6px 10px;background:rgba(11,11,43,.9);transform:rotate(-12deg);animation:st .35s cubic-bezier(.2,1.6,.4,1) both;pointer-events:none}
+@keyframes st{from{transform:rotate(-12deg) scale(3);opacity:0}to{transform:rotate(-12deg) scale(1);opacity:1}}
+.pl{flex:1 0 100%}
+.pl iframe{width:100%;height:200px;border:3px solid var(--cy);background:#000;display:block}
+.pl audio{width:100%;display:block}
+.pl small{display:block;margin-top:4px}
+.g{display:flex;gap:10px;flex-wrap:wrap;background:var(--panel);border:3px solid var(--cy);padding:8px;margin:8px 0}
+.g a{color:var(--cy)}
+.hide{display:none}
+small{color:#aab}
+.dock{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:680px;padding:14px 12px calc(10px + env(safe-area-inset-bottom,0px));background:linear-gradient(rgba(11,11,43,0),var(--bg) 30%);z-index:10;display:flex;flex-direction:column;align-items:center;gap:6px}
+#go{width:100%;font-size:14px;padding:14px;background:var(--hot);border-color:var(--acc);margin:0}
+.tab{font-size:9px;padding:6px 14px;border-bottom-width:0;box-shadow:none;border-color:var(--acc);color:var(--acc)}
+.tri{display:inline-block;width:0;height:0;border:5px solid transparent;margin:0 6px 1px 0;vertical-align:middle}
+.tri.up{border-bottom-color:var(--acc);border-top-width:0}
+.tri.dn{border-top-color:var(--acc);border-bottom-width:0;margin:0}
+.tb{position:fixed;left:50%;bottom:0;width:100%;max-width:680px;transform:translate(-50%,110%);visibility:hidden;transition:transform .25s,visibility 0s .25s;z-index:20;background:var(--panel);border:4px solid var(--acc);border-bottom:0;padding:10px 12px calc(14px + env(safe-area-inset-bottom,0px));max-height:78vh;overflow:auto}
+.tb.open{transform:translate(-50%,0);visibility:visible;transition:transform .25s,visibility 0s}
+.tbh{display:flex;justify-content:space-between;align-items:center;color:var(--acc);margin-bottom:8px}
+.tb h3{font-size:9px;color:var(--cy);margin:12px 0 6px;font-weight:normal}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{font-size:9px;padding:6px 8px}
+</style></head><body><div class="w">
+<h1>CRATE FISHING</h1>
+<div class="sub">CATCH RARE ELECTRONIC VINYL</div>
+<div class="spots" id="spots"></div>
+<button id="act" class="mini hide"></button>
+<canvas id="sc" width="320" height="180"></canvas>
+<div class="bar"><span id="cs">CASTS 0</span><button id="gb">FISHING GUIDE (0)</button></div>
+<div id="msg">PICK A SPOT, THEN CAST!</div>
+<div id="card" class="card hide"></div>
+<div id="guide" class="hide"></div>
+<small>Data provided by Discogs. Not affiliated with or endorsed by Discogs. Previews play from YouTube or Deezer.</small>
+</div>
+
+<div class="dock"><button id="tbo" class="tab"><i class="tri up"></i>TACKLE BOX</button><button id="go">CAST</button></div>
+
+<div id="tb" class="tb" aria-hidden="true">
+ <div class="tbh"><span>TACKLE BOX</span><button id="tbx" aria-label="Close tackle box"><i class="tri dn"></i></button></div>
+ <h3>STYLES (PICK ANY)</h3><div id="tkS" class="chips"></div>
+ <h3>DECADE</h3><div id="tkD" class="chips"></div>
+ <h3>COUNTRY</h3><div id="tkC" class="chips"></div>
+ <div class="acts"><button id="tbr">RESET</button><button id="tbd" class="on">DONE</button></div>
+</div>
+
+<script>
+const SP=[["OPEN WATER",[]],["HOUSE HARBOR",["House"]],["TECHNO TRENCH",["Techno","Tech House"]],["TRANCE TIDE",["Trance"]],["BREAKS BAY",["Breakbeat","Breaks"]],["DEEP HOUSE DEPTHS",["Deep House"]],["JUNGLE / DNB RAPIDS",["Jungle","Drum n Bass"]],["UKG GARAGE GULF",["UK Garage","Speed Garage","2-Step"]]];
+const STYLES=["House","Deep House","Tech House","Techno","Trance","Breakbeat","Breaks","Jungle","Drum n Bass","UK Garage","Speed Garage","2-Step"];
+const DECADES=[["ANY",""],["80S","1980"],["90S","1990"],["00S","2000"],["10S+","2010"]];
+const COUNTRIES=[["ANY",""],["US","US"],["UK","UK"],["GERMANY","Germany"],["ITALY","Italy"],["NETHERLANDS","Netherlands"],["FRANCE","France"]];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const url=r=>typeof r.u=="string"&&r.u.indexOf("https://www.discogs.com/")==0?r.u:"https://www.discogs.com/release/"+Number(r.id);
+const rar=r=>r.have==null?"COMMON":r.have<25?"LEGENDARY":r.have<150?"RARE":"COMMON";
+const meta=r=>esc((r.g||[]).join(", "))+"<br>"+esc(r.c)+(r.y?" / "+Number(r.y):"")+(r.have!=null?"<br>OWNED BY "+Number(r.have):"");
+let st="idle",t=0,wait=0,bt=0,spot=0,casts=0,cur=null,seen=new Set(),bad=new Set(),keeps=[],queue=[],loading=false,err="",cool=0,gen=0,dry=0,pf=false;
+let tk={styles:[],decade:"",country:""},tkSig="";
+try{keeps=JSON.parse(localStorage.getItem("cf_keeps2")||"[]")}catch(e){}
+try{const s=JSON.parse(localStorage.getItem("cf_tackle")||"null");if(s)tk={styles:(s.styles||[]).filter(x=>STYLES.includes(x)),decade:String(s.decade||""),country:String(s.country||"")}}catch(e){}
+const save=()=>{try{localStorage.setItem("cf_keeps2",JSON.stringify(keeps))}catch(e){}};
+const saveTk=()=>{try{localStorage.setItem("cf_tackle",JSON.stringify(tk))}catch(e){}};
+const eff=()=>tk.styles.length?tk.styles:SP[spot][1];
+const okDecade=x=>!tk.decade||(x.y&&(tk.decade=="2010"?x.y>=2010:x.y>=+tk.decade&&x.y<+tk.decade+10));
+
+/* ---------- fishing for records ---------- */
+async function fill(){
+ if(loading||Date.now()<cool)return;
+ loading=true;const g=gen;let added=0;
+ try{
+  for(let a=0;a<3&&!added;a++){
+   const q="/api/fish?styles="+encodeURIComponent(eff().join(","))+(tk.country?"&country="+encodeURIComponent(tk.country):"");
+   const r=await fetch(q),j=await r.json();
+   if(!r.ok)throw new Error(j.error||("error "+r.status));
+   if(g!=gen)return;
+   j.items.forEach(x=>{if(!okDecade(x)||seen.has(x.id)||bad.has(x.id)||queue.some(q=>q.id==x.id))return;queue.push(x);added++});
+   err="";
+  }
+  dry=added?0:dry+1;
+ }catch(e){if(g==gen){err=String(e.message||e);cool=Date.now()+15000}}
+ finally{if(g==gen){loading=false;prefetch()}}
+}
+/* before a record can be caught we check it has something playable (YouTube video or 30s preview) */
+async function check(x){
+ try{const r=await fetch("/api/listen?id="+Number(x.id)),j=await r.json();
+  if(!r.ok)x.L={err:true};else if(j.none)x.L={none:true};else x.L={yt:j.yt||null,preview:j.preview||null,track:j.track||null}}
+ catch(e){x.L={err:true}}
+}
+const playable=q=>q.L&&(q.L.yt||q.L.preview);
+async function prefetch(){
+ if(pf)return;pf=true;const g=gen;
+ try{
+  while(g==gen){
+   if(queue.filter(playable).length>=3)break;
+   const x=queue.find(q=>!q.L);
+   if(!x){if(queue.filter(playable).length<3&&!loading&&dry<3&&Date.now()>=cool){pf=false;fill()}break}
+   x.L={pending:true};await check(x);
+   if(g!=gen)break;
+   if(x.L.none){bad.add(x.id);const i=queue.indexOf(x);if(i>=0)queue.splice(i,1)}
+   await sleep(200);
+  }
+ }finally{pf=false}
+}
+function pick(){
+ let i=queue.findIndex(playable);if(i>=0)return i;
+ if(queue.length&&queue.every(q=>q.L&&!q.L.pending))return queue.findIndex(q=>q.L.err);
+ return -1;
+}
+async function reelIn(){
+ const t0=Date.now(),g=gen;
+ while(Date.now()-t0<7000&&g==gen){
+  const i=pick();
+  if(i>=0){cur=queue.splice(i,1)[0];seen.add(cur.id);st="caught";$("go").textContent="CAST";fxCatch(cur);showCard();return}
+  prefetch();if(!queue.length&&dry<3)fill();
+  await sleep(250);
+ }
+ st="idle";$("go").textContent="CAST";msg(err?"SIGNAL LOST: "+err:"THE FISH SLIPPED OFF. TRY AGAIN.");fill();
+}
+
+/* ---------- sound + effects ---------- */
+let AC;function beep(f,d,ty){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.type=ty||"square";o.frequency.value=f;g.gain.value=.05;o.connect(g);g.connect(AC.destination);o.start();g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.stop(AC.currentTime+d)}catch(e){}}
+const jingle=(n,step)=>n.forEach((f,i)=>setTimeout(()=>beep(f,.14),i*step));
+const buzz=p=>{try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}};
+let fx=[];
+const rock=()=>{const c=$("sc");c.classList.remove("shake");void c.offsetWidth;c.classList.add("shake");setTimeout(()=>c.classList.remove("shake"),380)};
+function burst(x,y,n,cols,power){for(let i=0;i<n;i++)fx.push({k:"p",x,y,vx:(Math.random()-.5)*4,vy:-(Math.random()*(power||3)+1),l:30+Math.random()*25,c:cols[Math.floor(Math.random()*cols.length)],s:2+Math.floor(Math.random()*2)})}
+function disc(x,y,w,c){cx.fillStyle="#111";cx.beginPath();cx.ellipse(x,y,w,7,0,0,7);cx.fill();cx.fillStyle=c;cx.beginPath();cx.ellipse(x,y,Math.max(1,w*.35),2.5,0,0,7);cx.fill()}
+function fxCatch(r){
+ const R=rar(r),cols=R=="LEGENDARY"?["#ffcc00","#ffffff","#ffe680"]:R=="RARE"?["#33ddff","#ffffff","#99f0ff"]:["#4a7bd8","#8fb4ff","#ffffff"];
+ burst(160,128,R=="COMMON"?18:40,cols,4.5);
+ fx.push({k:"ring",x:160,y:132,m:40});
+ fx.push({k:"rec",x:160,y:128,m:50,c:R=="LEGENDARY"?"#ffcc00":R=="RARE"?"#33ddff":"#ff3366"});
+ fx.push({k:"txt",s:R=="COMMON"?"NEW CATCH!":R+"!",c:cols[0],m:85});
+ if(R=="COMMON"){jingle([660,880,1320],100);buzz(25)}
+ else if(R=="RARE"){fx.push({k:"flash",c:"#33ddff",a:.6});rock();jingle([660,880,1100,1320],90);buzz([40,40,70])}
+ else{fx.push({k:"flash",c:"#ffcc00",a:.8});rock();jingle([523,659,784,1047,1319,1568],85);buzz([60,40,60,40,120])}
+}
+function fxKeep(){
+ burst(160,70,26,["#66ff66","#ffcc00","#ff3366","#33ddff","#ffffff"],5);
+ fx.push({k:"txt",s:"+1 IN YOUR CRATE",c:"#66ff66",m:80});
+ jingle([784,988,1175,1568],80);buzz([30,30,30]);
+}
+function fxRelease(){
+ fx.push({k:"sink",x:160,y:70,m:36,c:"#ff3366"});
+ beep(440,.12,"triangle");setTimeout(()=>beep(330,.12,"triangle"),110);setTimeout(()=>beep(220,.2,"triangle"),220);
+}
+function drawFx(){
+ for(let i=fx.length-1;i>=0;i--){const f=fx[i];f.t=(f.t||0)+1;
+  if(f.k=="p"){f.x+=f.vx;f.y+=f.vy;f.vy+=.12;cx.globalAlpha=Math.max(0,Math.min(1,f.l/15));cx.fillStyle=f.c;cx.fillRect(Math.floor(f.x),Math.floor(f.y),f.s,f.s);cx.globalAlpha=1;if(--f.l<=0)fx.splice(i,1)}
+  else if(f.k=="rec"){const p=Math.min(f.t/f.m,1),e=1-Math.pow(1-p,3);cx.globalAlpha=p>.8?(1-p)*5:1;disc(f.x,f.y-65*e,Math.max(2,Math.abs(Math.cos(f.t*.35))*14),f.c);cx.globalAlpha=1;if(f.t>=f.m)fx.splice(i,1)}
+  else if(f.k=="sink"){const p=Math.min(f.t/f.m,1);cx.globalAlpha=1-p*.4;disc(f.x,f.y+58*p,Math.max(1.5,Math.abs(Math.cos(f.t*.4))*14*(1-p*.6)),f.c);cx.globalAlpha=1;
+   if(f.t>=f.m){fx.splice(i,1);fx.push({k:"ring",x:f.x,y:f.y+60,m:44},{k:"ring",x:f.x,y:f.y+60,m:44,d:8});burst(f.x,f.y+58,14,["#8fb4ff","#ffffff","#4a7bd8"],3)}}
+  else if(f.k=="ring"){const tt=f.t-(f.d||0);if(tt>0){const a=1-tt/f.m;cx.strokeStyle="rgba(255,255,255,"+Math.max(0,a)+")";cx.lineWidth=1;cx.beginPath();cx.ellipse(f.x,f.y,tt*.9,tt*.3,0,0,7);cx.stroke()}if(f.t>=f.m+(f.d||0))fx.splice(i,1)}
+  else if(f.k=="txt"){const y=52-Math.min(f.t,10)*.8,a=f.t>f.m-15?Math.max(0,(f.m-f.t)/15):1;cx.globalAlpha=a;cx.font='10px "Press Start 2P",monospace';cx.textAlign="center";cx.fillStyle="#000";cx.fillText(f.s,161,y+1);cx.fillStyle=f.c;cx.fillText(f.s,160,y);cx.textAlign="left";cx.globalAlpha=1;if(f.t>=f.m)fx.splice(i,1)}
+  else if(f.k=="flash"){cx.globalAlpha=Math.max(0,f.a);cx.fillStyle=f.c;cx.fillRect(0,0,320,180);cx.globalAlpha=1;f.a-=.05;if(f.a<=0)fx.splice(i,1)}
+ }
+}
+
+/* ---------- art + cards ---------- */
+function art(r,cv){cv.width=8;cv.height=8;const c=cv.getContext("2d");let h=7;for(const ch of String(r.a)+String(r.t))h=(h*31+ch.charCodeAt(0))>>>0;const rn=()=>(h=(h*1103515245+12345)>>>0)/4294967296,hu=rn()*360;c.fillStyle="hsl("+hu+",60%,15%)";c.fillRect(0,0,8,8);for(let x=0;x<4;x++)for(let y=0;y<8;y++){const v=rn();if(v>.45){c.fillStyle=v>.75?"hsl("+(hu+150)%360+",90%,60%)":"hsl("+hu+",85%,55%)";c.fillRect(x,y,1,1);c.fillRect(7-x,y,1,1)}}
+ if(r.img&&/^https:\/\//.test(r.img)){const im=new Image();im.referrerPolicy="no-referrer";im.onload=()=>{cv.width=32;cv.height=32;cv.getContext("2d").drawImage(im,0,0,32,32)};im.src=r.img}}
+function player(box,L){
+ box.innerHTML="";
+ if(L&&L.yt&&/^[A-Za-z0-9_-]{11}$/.test(L.yt)){
+  const f=document.createElement("iframe");f.src="https://www.youtube-nocookie.com/embed/"+L.yt+"?autoplay=1&playsinline=1&rel=0";f.allow="autoplay; encrypted-media; picture-in-picture";f.referrerPolicy="strict-origin-when-cross-origin";f.title="Record preview";f.setAttribute("allowfullscreen","");box.appendChild(f);
+  if(L.track){const s=document.createElement("small");s.textContent="TRACK: "+L.track;box.appendChild(s)}
+ }else if(L&&L.preview&&/^https:\/\//.test(L.preview)){
+  const a=document.createElement("audio");a.controls=true;a.src=L.preview;a.preload="auto";box.appendChild(a);const p=a.play();if(p&&p.catch)p.catch(()=>{});
+  const s=document.createElement("small");s.textContent="30 SEC PREVIEW"+(L.track?" - "+L.track:"");box.appendChild(s);
+ }
+}
+function showCard(){
+ const r=cur,c=$("card");c.className="card";c.innerHTML="";
+ const cv=document.createElement("canvas");art(r,cv);c.appendChild(cv);
+ const d=document.createElement("div");d.style.flex="1";
+ d.innerHTML='<span class="tag">'+rar(r)+'</span><br>'+esc(r.a)+'<br><span style="color:#ffcc00">'+esc(r.t)+'</span><br><small>'+meta(r)+'</small><div class="acts"><button id="kp" style="border-color:#66ff66">KEEP</button><button id="rl">RELEASE</button><a class="btn" target="_blank" rel="noopener" href="'+esc(url(r))+'">BUY / DISCOGS</a></div>';
+ c.appendChild(d);
+ const pl=document.createElement("div");pl.className="pl";c.appendChild(pl);
+ if(playable(r))player(pl,r.L);else pl.innerHTML="<small>NO PREVIEW FOUND. TRY THE DISCOGS PAGE.</small>";
+ $("kp").onclick=()=>{
+  if(st!="caught")return;st="busy";
+  const kr=Object.assign({},r);kr.L=r.L&&r.L.yt?{yt:r.L.yt,track:r.L.track||null}:null;
+  keeps.unshift({r:kr,at:Date.now()});save();
+  const s=document.createElement("div");s.className="stamp";s.textContent="KEPT!";c.appendChild(s);
+  fxKeep();$("gb").classList.remove("pop");void $("gb").offsetWidth;$("gb").classList.add("pop");
+  setTimeout(()=>done("KEPT! ADDED TO YOUR GUIDE."),800);
+ };
+ $("rl").onclick=()=>{
+  if(st!="caught")return;st="busy";
+  c.classList.add("out");fxRelease();
+  setTimeout(()=>done("RELEASED. IT SWIMS AWAY..."),420);
+ };
+}
+function done(m){
+ const c=$("card");c.className="card hide";c.innerHTML="";   /* clearing the card also stops any playing preview */
+ st="idle";msg(m);$("gb").textContent="FISHING GUIDE ("+keeps.length+")";
+ if(!$("guide").classList.contains("hide"))renderGuide();
+ if(queue.length<4)fill();
+}
+function renderGuide(){
+ const g=$("guide");g.innerHTML=keeps.length?"":"<div class='g'>NOTHING KEPT YET. GO FISH!</div>";
+ keeps.forEach(k=>{
+  const r=k.r,d=document.createElement("div");d.className="g";
+  const cv=document.createElement("canvas");art(r,cv);d.appendChild(cv);
+  const x=document.createElement("div");x.innerHTML=rar(r)+"<br>"+esc(r.a)+"<br><span style='color:#ffcc00'>"+esc(r.t)+"</span><br><small>"+meta(r)+"</small><br><a target='_blank' rel='noopener' href='"+esc(url(r))+"'>BUY / DISCOGS</a>";
+  d.appendChild(x);
+  if(r.L&&r.L.yt){
+   const pl=document.createElement("div");pl.className="pl";
+   const b=document.createElement("button");b.textContent="PLAY";b.style.marginTop="6px";
+   let on=false;b.onclick=()=>{on=!on;b.textContent=on?"STOP":"PLAY";if(on)player(pl,r.L);else pl.innerHTML=""};
+   x.appendChild(document.createElement("br"));x.appendChild(b);d.appendChild(pl);
+  }
+  g.appendChild(d);
+ });
+}
+$("gb").onclick=()=>{const g=$("guide");g.classList.toggle("hide");if(!g.classList.contains("hide"))renderGuide()};
+$("gb").textContent="FISHING GUIDE ("+keeps.length+")";
+
+/* ---------- spots + tackle box ---------- */
+function msg(m){$("msg").textContent=m}
+function filtersChanged(m){gen++;loading=false;pf=false;queue=[];err="";dry=0;cool=0;if(m)msg(m);fill()}
+function renderSpots(){$("spots").innerHTML="";SP.forEach((s,i)=>{const b=document.createElement("button");b.textContent=s[0];b.className=i==spot?"on":"";b.onclick=()=>{if(st=="idle"){spot=i;tk.styles=[];saveTk();renderSpots();renderActive();filtersChanged("FISHING AT "+s[0])}};$("spots").appendChild(b)})}
+function renderActive(){
+ const p=[];if(tk.styles.length)p.push(tk.styles.join("+").toUpperCase());
+ if(tk.decade)p.push(DECADES.find(d=>d[1]==tk.decade)[0]);
+ if(tk.country)p.push(tk.country.toUpperCase());
+ const b=$("act");if(p.length){b.textContent="TACKLE: "+p.join(" / ");b.classList.remove("hide")}else b.classList.add("hide");
+}
+function chipRow(id,list,isOn,onTap){
+ const box=$(id);box.innerHTML="";
+ list.forEach(it=>{const b=document.createElement("button");b.textContent=String(it[0]).toUpperCase();b.className=isOn(it[1])?"on":"";b.onclick=()=>{onTap(it[1]);renderTackle()};box.appendChild(b)});
+}
+function renderTackle(){
+ chipRow("tkS",STYLES.map(s=>[s,s]),v=>tk.styles.includes(v),v=>{const i=tk.styles.indexOf(v);if(i>=0)tk.styles.splice(i,1);else tk.styles.push(v)});
+ chipRow("tkD",DECADES,v=>tk.decade==v,v=>{tk.decade=v});
+ chipRow("tkC",COUNTRIES,v=>tk.country==v,v=>{tk.country=v});
+ saveTk();renderActive();
+}
+const sig=()=>JSON.stringify(tk);
+function openTb(){
+ if(st!="idle"&&st!="caught"){msg("FINISH YOUR CAST FIRST!");return}
+ tkSig=sig();renderTackle();$("tb").classList.add("open");$("tb").setAttribute("aria-hidden","false");
+}
+function closeTb(){
+ $("tb").classList.remove("open");$("tb").setAttribute("aria-hidden","true");
+ if(sig()!=tkSig){renderActive();filtersChanged("TACKLE BOX UPDATED!")}
+}
+$("tbo").onclick=openTb;$("act").onclick=openTb;$("tbx").onclick=closeTb;$("tbd").onclick=closeTb;
+$("tbr").onclick=()=>{tk={styles:[],decade:"",country:""};renderTackle()};
+
+/* ---------- the cast button ---------- */
+function act(){
+ if($("tb").classList.contains("open"))return;
+ if(st=="idle"){st="cast";t=0;casts++;$("cs").textContent="CASTS "+casts;$("go").textContent="...";msg("CASTING...");beep(300,.15);if(queue.length<4)fill();prefetch()}
+ else if(st=="wait"){st="idle";$("go").textContent="CAST";msg("TOO EARLY! YOU SPOOKED IT.");beep(120,.3,"sawtooth")}
+ else if(st=="bite"){st="reel";$("go").textContent="...";msg("REELING IT IN...");reelIn()}
+}
+$("go").onclick=act;$("sc").onclick=act;document.addEventListener("keydown",e=>{if(e.code=="Space"&&e.target.tagName!="BUTTON"){e.preventDefault();act()}});
+
+/* ---------- the scene ---------- */
+const cx=$("sc").getContext("2d"),SK=["#2a1a6a","#4a2a8a","#7a3a9a","#b04a9a","#e0589a","#ff7a8a","#ffa07a","#ffcc88"];
+function draw(){t++;
+ SK.forEach((c,i)=>{cx.fillStyle=c;cx.fillRect(0,i*12,320,12)});
+ cx.fillStyle="#ffe066";for(let y=-18;y<=18;y+=2){const w=Math.floor(Math.sqrt(324-y*y));if(84+y<96)cx.fillRect(230-w,84+y,w*2,2)}
+ cx.fillStyle="#1a1040";for(let x=0;x<320;x+=4){const h=Math.floor(20+14*Math.abs(Math.sin(x/37))+8*Math.sin(x/11));cx.fillRect(x,96-h,4,h)}
+ cx.fillStyle="#1b3a8a";cx.fillRect(0,96,320,84);cx.fillStyle="#ffcc66";for(let y=98;y<130;y+=4)cx.fillRect(222+(y%8),y,16-(y-98)/4,2);
+ cx.fillStyle="#4a7bd8";for(let y=102;y<180;y+=7)for(let i=0;i<6;i++){const x=Math.floor((i*61+y*13+t*(.2+y/300))%320);cx.fillRect(x,y,10,1)}
+ let bx=160,by=0,show=true;
+ if(st=="cast"){const p=Math.min(t/30,1);by=170-40*p-40*Math.sin(Math.PI*p);bx=250-90*p;if(t>=30){st="wait";wait=60+Math.floor(Math.random()*140);t=0;msg("WAITING FOR A BITE...");prefetch()}}
+ else if(st=="wait"){by=130+Math.sin(t/15)*1.5;if(--wait<=0){st="bite";bt=75;$("go").textContent="REEL!";msg("!!! BITE !!! TAP REEL NOW!");beep(520,.1);setTimeout(()=>beep(780,.12),110)}}
+ else if(st=="bite"){by=130+(t%6<3?5:0);if(--bt<=0){st="idle";$("go").textContent="CAST";msg("IT GOT AWAY...")}}
+ else if(st=="reel"){by=128+(t%4<2?3:0)}
+ else show=false;
+ if(show){cx.fillStyle="#fff";for(let i=0;i<=24;i++){const f=i/24;cx.fillRect(Math.floor(240+(bx-240)*f),Math.floor(150+(by-150)*f+Math.sin(f*3.14)*8),1,1)}
+  cx.fillStyle="#ff3366";cx.fillRect(Math.floor(bx)-3,Math.floor(by)-4,6,4);cx.fillStyle="#fff";cx.fillRect(Math.floor(bx)-3,Math.floor(by),6,3);
+  if(st=="bite"){cx.fillStyle="#ffcc00";cx.font='16px "Press Start 2P",monospace';cx.fillText("!",bx-5,by-12)}}
+ cx.fillStyle="#5a3a1a";for(let i=0;i<70;i++){cx.fillRect(Math.floor(300-i*.86),Math.floor(180-i*.43),3,3)}
+ cx.fillStyle="#222";cx.fillRect(238,147,5,5);
+ drawFx();
+ requestAnimationFrame(draw)}
+renderSpots();renderActive();fill();draw();
+</script></body></html>
