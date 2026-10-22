@@ -60,7 +60,7 @@ small{color:#aab}
 <div id="msg">PICK A SPOT, THEN CAST!</div>
 <div id="card" class="card hide"></div>
 <div id="guide" class="hide"></div>
-<small>Data provided by Discogs. Not affiliated with or endorsed by Discogs. Previews play from YouTube or Deezer.</small>
+<small>This application uses Discogs' API but is not affiliated with, sponsored or endorsed by Discogs. 'Discogs' is a trademark of Zink Media, LLC. Previews play from YouTube or Deezer.</small>
 </div>
 
 <div class="dock"><button id="tbo" class="tab"><i class="tri up"></i>TACKLE BOX</button><button id="go">CAST</button></div>
@@ -84,7 +84,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const url=r=>typeof r.u=="string"&&r.u.indexOf("https://www.discogs.com/")==0?r.u:"https://www.discogs.com/release/"+Number(r.id);
 const rar=r=>r.have==null?"COMMON":r.have<25?"LEGENDARY":r.have<150?"RARE":"COMMON";
 const meta=r=>esc((r.g||[]).join(", "))+"<br>"+esc(r.c)+(r.y?" / "+Number(r.y):"")+(r.have!=null?"<br>OWNED BY "+Number(r.have):"");
-let st="idle",t=0,wait=0,bt=0,spot=0,casts=0,cur=null,seen=new Set(),bad=new Set(),keeps=[],queue=[],loading=false,err="",cool=0,gen=0,dry=0,pf=false;
+let st="idle",t=0,wait=0,bt=0,spot=0,casts=0,cur=null,seen=new Set(),bad=new Set(),keeps=[],queue=[],loading=false,err="",cool=0,gen=0,dry=0,pf=false,thin=false;
 let tk={styles:[],decade:"",country:""},tkSig="";
 try{keeps=JSON.parse(localStorage.getItem("cf_keeps2")||"[]")}catch(e){}
 try{const s=JSON.parse(localStorage.getItem("cf_tackle")||"null");if(s)tk={styles:(s.styles||[]).filter(x=>STYLES.includes(x)),decade:String(s.decade||""),country:String(s.country||"")}}catch(e){}
@@ -99,10 +99,11 @@ async function fill(){
  loading=true;const g=gen;let added=0;
  try{
   for(let a=0;a<3&&!added;a++){
-   const q="/api/fish?styles="+encodeURIComponent(eff().join(","))+(tk.country?"&country="+encodeURIComponent(tk.country):"");
+   const q="/api/fish?styles="+encodeURIComponent(eff().join(","))+(tk.country?"&country="+encodeURIComponent(tk.country):"")+(tk.decade?"&decade="+tk.decade:"");
    const r=await fetch(q),j=await r.json();
    if(!r.ok)throw new Error(j.error||("error "+r.status));
    if(g!=gen)return;
+   thin=!!j.thin;
    j.items.forEach(x=>{if(!okDecade(x)||seen.has(x.id)||bad.has(x.id)||queue.some(q=>q.id==x.id))return;queue.push(x);added++});
    err="";
   }
@@ -144,7 +145,7 @@ async function reelIn(){
   prefetch();if(!queue.length&&dry<3)fill();
   await sleep(250);
  }
- st="idle";$("go").textContent="CAST";msg(err?"SIGNAL LOST: "+err:"THE FISH SLIPPED OFF. TRY AGAIN.");fill();
+ st="idle";$("go").textContent="CAST";msg(err?"SIGNAL LOST: "+err:thin?"THIN WATERS HERE. TRY FEWER TACKLE BOX FILTERS OR ANOTHER SPOT.":"THE FISH SLIPPED OFF. TRY AGAIN.");fill();
 }
 
 /* ---------- sound + effects ---------- */
@@ -203,7 +204,7 @@ function showCard(){
  const r=cur,c=$("card");c.className="card";c.innerHTML="";
  const cv=document.createElement("canvas");art(r,cv);c.appendChild(cv);
  const d=document.createElement("div");d.style.flex="1";
- d.innerHTML='<span class="tag">'+rar(r)+'</span><br>'+esc(r.a)+'<br><span style="color:#ffcc00">'+esc(r.t)+'</span><br><small>'+meta(r)+'</small><div class="acts"><button id="kp" style="border-color:#66ff66">KEEP</button><button id="rl">RELEASE</button><a class="btn" target="_blank" rel="noopener" href="'+esc(url(r))+'">BUY / DISCOGS</a></div>';
+ d.innerHTML='<span class="tag">'+rar(r)+'</span><br>'+esc(r.a)+'<br><span style="color:#ffcc00">'+esc(r.t)+'</span><br><small>'+meta(r)+'</small><br><small><a href="'+esc(url(r))+'" target="_blank" rel="noopener" style="color:#33ddff">Data provided by Discogs</a></small><div class="acts"><button id="kp" style="border-color:#66ff66">KEEP</button><button id="rl">RELEASE</button><a class="btn" target="_blank" rel="noopener" href="'+esc(url(r))+'">BUY / DISCOGS</a></div>';
  c.appendChild(d);
  const pl=document.createElement("div");pl.className="pl";c.appendChild(pl);
  if(playable(r))player(pl,r.L);else pl.innerHTML="<small>NO PREVIEW FOUND. TRY THE DISCOGS PAGE.</small>";
@@ -232,7 +233,7 @@ function renderGuide(){
  keeps.forEach(k=>{
   const r=k.r,d=document.createElement("div");d.className="g";
   const cv=document.createElement("canvas");art(r,cv);d.appendChild(cv);
-  const x=document.createElement("div");x.innerHTML=rar(r)+"<br>"+esc(r.a)+"<br><span style='color:#ffcc00'>"+esc(r.t)+"</span><br><small>"+meta(r)+"</small><br><a target='_blank' rel='noopener' href='"+esc(url(r))+"'>BUY / DISCOGS</a>";
+  const x=document.createElement("div");x.innerHTML=rar(r)+"<br>"+esc(r.a)+"<br><span style='color:#ffcc00'>"+esc(r.t)+"</span><br><small>"+meta(r)+"</small><br><a target='_blank' rel='noopener' href='"+esc(url(r))+"'>BUY / DISCOGS</a><br><small><a target='_blank' rel='noopener' href='"+esc(url(r))+"'>Data provided by Discogs</a></small>";
   d.appendChild(x);
   if(r.L&&r.L.yt){
    const pl=document.createElement("div");pl.className="pl";
@@ -248,7 +249,7 @@ $("gb").textContent="FISHING GUIDE ("+keeps.length+")";
 
 /* ---------- spots + tackle box ---------- */
 function msg(m){$("msg").textContent=m}
-function filtersChanged(m){gen++;loading=false;pf=false;queue=[];err="";dry=0;cool=0;if(m)msg(m);fill()}
+function filtersChanged(m){gen++;loading=false;pf=false;queue=[];err="";thin=false;dry=0;cool=0;if(m)msg(m);fill()}
 function renderSpots(){$("spots").innerHTML="";SP.forEach((s,i)=>{const b=document.createElement("button");b.textContent=s[0];b.className=i==spot?"on":"";b.onclick=()=>{if(st=="idle"){spot=i;tk.styles=[];saveTk();renderSpots();renderActive();filtersChanged("FISHING AT "+s[0])}};$("spots").appendChild(b)})}
 function renderActive(){
  const p=[];if(tk.styles.length)p.push(tk.styles.join("+").toUpperCase());
