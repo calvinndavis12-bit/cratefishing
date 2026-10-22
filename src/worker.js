@@ -16,6 +16,8 @@ const DECADES = ["1980","1990","2000","2010"];
 const MAX_PAGE = 25;                 // random page 1-25 of each style's search results (1,250 records)
 const TTL = 6 * 60 * 60 * 1000;      // everything we keep expires after 6 hours
 const BUDGET = 45;                   // Cloudflare's FREE plan allows 50 outside calls (fetches + database calls) per run. Paid plan: raise this.
+const COOL_MS = 75000;               // rest this long after Discogs says slow down (their window is 60 seconds)
+const SAFE_LEFT = 8;                 // stop a run early if Discogs reports fewer than this many requests left
 const MAX_CHECK = 15;                // releases checked per run => about 16 Discogs requests a minute at most (limit is 60)
 const memo = new Map();
 const out = (code, body) => new Response(JSON.stringify(body), { status: code, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -90,7 +92,9 @@ async function refillInner(env) {
   let ops = 0;                                                     // counts every outside call, to stay under Cloudflare's per-run limit
   const cool = await env.DB.prepare("SELECT v FROM meta WHERE k='cool'").first(); ops++;
   if (cool && now < Number(cool.v)) return { skipped: "cooling down after Discogs said slow down" };
-  const coolDown = () => env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('cool', ?)").bind(String(Date.now() + 120000)).run();
+  const coolDown = () => env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('cool', ?)").bind(String(Date.now() + COOL_MS)).run();
+  const leftOf = resp => { const v = Number(resp.headers.get("x-discogs-ratelimit-remaining")); return resp.headers.get("x-discogs-ratelimit-remaining") === null || isNaN(v) ? null : v; };
+  let low = false;
 
   await env.DB.prepare("DELETE FROM pool WHERE at<?").bind(now - TTL).run(); ops++;          // forget anything older than 6 hours
   const rows = (await env.DB.prepare("SELECT style, COUNT(*) AS n FROM pool WHERE ok=1 GROUP BY style").all()).results || []; ops++;
@@ -106,9 +110,12 @@ async function refillInner(env) {
   let json = await r.json();
   if (!(json.results || []).length && page > 1) {
     r = await search(1); ops++;
+    if (r.status === 429) { await coolDown(); return { style, error: "Discogs 429 on search" }; }
     if (!r.ok) return { style, error: "Discogs returned " + r.status };
     json = await r.json();
   }
+  const afterSearch = leftOf(r);
+  if (afterSearch !== null && afterSearch < SAFE_LEFT + 4) return { style, skipped: "Discogs says only " + afterSearch + " requests left this minute; waiting" };
   const items = (json.results || []).map(shape);
   if (!items.length) return { style, found: 0 };
   const have = new Set(((await env.DB.prepare("SELECT id FROM pool WHERE id IN (" + items.map(() => "?").join(",") + ")").bind(...items.map(i => i.id)).all()).results || []).map(x => x.id)); ops++;
@@ -119,6 +126,7 @@ async function refillInner(env) {
     if (ops + 3 > BUDGET - 1) break;                               // keep room for the final save
     const rr = await fetch("https://api.discogs.com/releases/" + it.id, { headers: H }); ops++;
     if (rr.status === 429) { cooled = true; break; }
+    const left = leftOf(rr); if (left !== null && left < SAFE_LEFT) low = true;
     let yt = null, track = null;
     if (rr.ok) {
       const rel = await rr.json();
@@ -128,6 +136,7 @@ async function refillInner(env) {
       track = tracks[0] ? tracks[0].title : null;
     } else if (rr.status !== 404) continue;                        // some other hiccup: try this one again another time
     checked++; done.push({ it, yt, track });
+    if (low) break;                                                // Discogs allowance nearly used: save what we have and stop
     await sleep(250);
   }
   const add = done.filter(d => d.yt).length;
@@ -135,7 +144,7 @@ async function refillInner(env) {
     .bind(it.id, style, it.c || "", it.y || 0, yt ? 1 : 0, yt, yt ? JSON.stringify({ ...it, L: { yt, track } }) : null, now));
   const summary = { at: now, style, checked, added: add, calls: ops + 1 };
   stmts.push(env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('last', ?)").bind(JSON.stringify(summary)));
-  if (cooled) stmts.push(env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('cool', ?)").bind(String(Date.now() + 120000)));
+  if (cooled) stmts.push(env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('cool', ?)").bind(String(Date.now() + COOL_MS)));
   await env.DB.batch(stmts);
   return summary;
 }
@@ -202,7 +211,8 @@ async function fish(request, env) {
       const r = await fromPool(env, list, country, decade);
       if (r.items.length) return out(200, { source: "pool", items: r.items });
       if (r.total > 0) return out(200, { source: "pool", items: [], thin: true });   // pool has records, just none matching these filters
-    } catch (e) { /* database hiccup: fall through to live lookup */ }
+      return out(503, { error: "The record pool is still filling. Try again in a minute or two" });   // visitors never fall back to Discogs, so they can't use up the allowance the filler needs
+    } catch (e) { return out(503, { error: "Record pool is unavailable for a moment. Try again" }); }
   }
   if (!env.DISCOGS_TOKEN) return out(500, { error: "DISCOGS_TOKEN is not set in Cloudflare" });
   const H = hdrs(env.DISCOGS_TOKEN);                               // backup path: pool is empty or not set up yet
