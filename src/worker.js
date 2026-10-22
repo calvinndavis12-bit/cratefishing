@@ -95,6 +95,13 @@ async function refillInner(env) {
   const coolDown = () => env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('cool', ?)").bind(String(Date.now() + COOL_MS)).run();
   const leftOf = resp => { const v = Number(resp.headers.get("x-discogs-ratelimit-remaining")); return resp.headers.get("x-discogs-ratelimit-remaining") === null || isNaN(v) ? null : v; };
   let low = false;
+  // when Discogs refuses, record exactly what it said and which Cloudflare address we came from
+  const why = async (resp, what) => {
+    const h = n => resp.headers.get(n);
+    let body = ""; try { body = (await resp.text()).slice(0, 120); } catch (e) {}
+    let egress = null; try { const t = await (await fetch("https://www.cloudflare.com/cdn-cgi/trace")).text(); egress = { ip: (t.match(/ip=(\S+)/) || [])[1], colo: (t.match(/colo=(\S+)/) || [])[1] }; } catch (e) {}
+    return { style, error: what, discogs: { status: resp.status, limit: h("x-discogs-ratelimit"), used: h("x-discogs-ratelimit-used"), remaining: h("x-discogs-ratelimit-remaining"), retryAfter: h("retry-after"), body }, egress };
+  };
 
   await env.DB.prepare("DELETE FROM pool WHERE at<?").bind(now - TTL).run(); ops++;          // forget anything older than 6 hours
   const rows = (await env.DB.prepare("SELECT style, COUNT(*) AS n FROM pool WHERE ok=1 GROUP BY style").all()).results || []; ops++;
@@ -105,13 +112,13 @@ async function refillInner(env) {
   const search = page => fetch("https://api.discogs.com/database/search?type=release&format=Vinyl&per_page=50&style=" + encodeURIComponent(style) + "&page=" + page, { headers: H });
   const page = 1 + Math.floor(Math.random() * MAX_PAGE);
   let r = await search(page); ops++;
-  if (r.status === 429) { await coolDown(); return { style, error: "Discogs 429 on search" }; }
-  if (!r.ok) return { style, error: "Discogs returned " + r.status };
+  if (r.status === 429) { await coolDown(); return await why(r, "Discogs 429 on search"); }
+  if (!r.ok) return await why(r, "Discogs returned " + r.status);
   let json = await r.json();
   if (!(json.results || []).length && page > 1) {
     r = await search(1); ops++;
-    if (r.status === 429) { await coolDown(); return { style, error: "Discogs 429 on search" }; }
-    if (!r.ok) return { style, error: "Discogs returned " + r.status };
+    if (r.status === 429) { await coolDown(); return await why(r, "Discogs 429 on search"); }
+    if (!r.ok) return await why(r, "Discogs returned " + r.status);
     json = await r.json();
   }
   const afterSearch = leftOf(r);
