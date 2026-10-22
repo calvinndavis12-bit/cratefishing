@@ -64,8 +64,11 @@ async function poolStatus(env) {
   const last = await env.DB.prepare("SELECT v FROM meta WHERE k='last'").first();
   const perStyle = Object.fromEntries(STYLES.map(s => [s, 0]));
   per.forEach(r => { perStyle[r.style] = r.n; });
+  const cool = await env.DB.prepare("SELECT v FROM meta WHERE k='cool'").first();
   let lastRun = null; try { lastRun = last ? JSON.parse(last.v) : null; } catch (e) {}
-  return out(200, { configured: true, playable: per.reduce((a, r) => a + r.n, 0), checkedLast6h: checked ? checked.n : 0, perStyle, lastRun });
+  if (lastRun && lastRun.at) lastRun.secondsAgo = Math.round((Date.now() - lastRun.at) / 1000);
+  const coolingSeconds = cool ? Math.max(0, Math.round((Number(cool.v) - Date.now()) / 1000)) : 0;
+  return out(200, { configured: true, playable: per.reduce((a, r) => a + r.n, 0), checkedLast6h: checked ? checked.n : 0, coolingSeconds, hasToken: !!env.DISCOGS_TOKEN, perStyle, lastRun });
 }
 
 // ---------- the once-a-minute job that fills the pool ----------
@@ -80,7 +83,7 @@ async function embeddable(id) {       // YouTube answers 401/404 here when a vid
   } catch (e) { return false; }
 }
 
-async function refill(env) {
+async function refillInner(env) {
   if (!env.DB || !env.DISCOGS_TOKEN) return { skipped: "DB or DISCOGS_TOKEN is not set" };
   await ensureSchema(env);
   const H = hdrs(env.DISCOGS_TOKEN), now = Date.now();
@@ -135,6 +138,26 @@ async function refill(env) {
   if (cooled) stmts.push(env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('cool', ?)").bind(String(Date.now() + 120000)));
   await env.DB.batch(stmts);
   return summary;
+}
+
+// Every run leaves a note in the database (even when it skips or fails) so /api/pool can say what happened.
+async function refill(env) {
+  let res;
+  try { res = await refillInner(env); } catch (e) { res = { error: String((e && e.message) || e) }; }
+  if (env.DB && !res.calls && !String(res.skipped || "").startsWith("DB")) {
+    try { await env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('last', ?)").bind(JSON.stringify({ at: Date.now(), ...res })).run(); } catch (e) {}
+  }
+  return res;
+}
+
+// Visiting /api/refill runs one job by hand, but never more than once every 45 seconds (so it can't hammer Discogs).
+async function manualRefill(env) {
+  if (!env.DB) return out(200, { configured: false });
+  await ensureSchema(env);
+  const last = await env.DB.prepare("SELECT v FROM meta WHERE k='last'").first();
+  let at = 0; try { at = last ? JSON.parse(last.v).at || 0 : 0; } catch (e) {}
+  if (Date.now() - at < 45000) return out(200, { skipped: "A run happened " + Math.round((Date.now() - at) / 1000) + "s ago. Try again in under a minute." });
+  return out(200, await refill(env));
 }
 
 // ---------- /api/fish ----------
@@ -248,6 +271,7 @@ export default {
     const p = new URL(request.url).pathname;
     if (p === "/api/fish") return fish(request, env);
     if (p === "/api/pool") return poolStatus(env);
+    if (p === "/api/refill") return manualRefill(env);
     if (p === "/api/listen") return listen(request, env);
     return env.ASSETS.fetch(request);
   },
